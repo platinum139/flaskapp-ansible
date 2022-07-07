@@ -3,6 +3,8 @@
   become: true
 
   vars_prompt:
+    - name: db_hostname
+      prompt: Etner db hostname
     - name: db_password
       prompt: Enter db password
 
@@ -77,6 +79,7 @@
       git:
         repo: git@github.com:platinum139/FlaskApp.git
         dest: /home/ubuntu/FlaskApp
+        version: aws-deploy
         clone: yes
         update: yes
         accept_hostkey: yes
@@ -86,6 +89,7 @@
       copy:
         dest: "/home/ubuntu/FlaskApp/.env"
         content: |
+          DB_HOSTNAME={{db_hostname}}
           DB_PASSWORD={{db_password}}
 
     - name: Docker Compose Up
