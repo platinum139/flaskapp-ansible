@@ -3,8 +3,6 @@
   become: true
 
   vars_prompt:
-    - name: db_hostname
-      prompt: Etner db hostname
     - name: db_password
       prompt: Enter db password
 
@@ -89,8 +87,8 @@
       copy:
         dest: "/home/ubuntu/FlaskApp/.env"
         content: |
-          DB_HOSTNAME={{db_hostname}}
-          DB_PASSWORD={{db_password}}
+          DB_HOSTNAME={{ hostvars[groups['db_hosts'][0]].private_ip }}
+          DB_PASSWORD={{ db_password }}
 
     - name: Docker Compose Up
       docker_compose:

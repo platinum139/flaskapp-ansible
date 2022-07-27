@@ -1,0 +1,125 @@
+- hosts: db_hosts
+  remote_user: ubuntu
+  become: true
+  gather_facts: yes
+
+  tasks:
+    - name: Update all packages
+      apt:
+        update_cache: yes
+        name: "*"
+        state: latest
+
+    - name: Set hostname
+      hostname:
+        name: "{{ inventory_hostname }}"
+
+    - name: Install dependencies
+      apt:
+        pkg:
+          - ca-certificates
+          - curl
+          - gnupg2
+          - lsb-release
+          - htop
+
+    - name: Install pip3
+      apt: 
+        name: python3-pip 
+        state: present 
+
+    - name: Install PyMysql
+      pip:
+        name: pymysql
+        state: present
+
+    - name: Add Percona repo
+      apt:
+        deb: "https://repo.percona.com/apt/percona-release_latest.{{ ansible_distribution_release}}_all.deb"
+    
+    - name: Set Percona dist
+      shell: percona-release setup ps80
+    
+    - name: Install Percona 8.0
+      apt: 
+        name: percona-server-server
+        state: present
+        update_cache: yes
+
+    - name: Copy config file
+      template:
+        src: templates/mysqld.cnf
+        dest: /etc/mysql/mysql.conf.d/mysqld.cnf
+        owner: root
+        group: root
+        mode: 0644
+
+    - name: Restart database
+      systemd:
+        name: mysql
+        state: restarted
+
+
+- hosts: master
+  remote_user: ubuntu
+  become: true
+  gather_facts: yes
+
+  vars_prompt:
+    - name: replica_user_psw
+      prompt: Enter replica user password
+    - name: user_password
+      prompt: Enter devops user password
+
+  tasks:
+    - name: Set user for replica
+      community.mysql.mysql_user:
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+        name: replica
+        host: '172.31.%.%'
+        password: "{{ replica_user_psw }}"
+        plugin: mysql_native_password
+        priv: "*.*:REPLICATION SLAVE"
+        state: present
+        
+    - name: Show master status
+      mysql_replication:
+        mode: getprimary
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+      register: masterstatus
+
+    - name: Create devops user for web
+      community.mysql.mysql_user:
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+        plugin: mysql_native_password
+        name: devops
+        password: "{{ user_password }}"
+        host: "{{ hostvars['web-server'].private_ip }}"
+        priv: '*.*:ALL'
+        state: present
+
+
+- hosts: replica
+  remote_user: ubuntu
+  become: true
+  gather_facts: yes
+
+  vars_prompt:
+    - name: master_password
+      prompt: Enter master password
+
+  tasks:
+    - name: Set master to master server
+      mysql_replication:
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+        mode: changeprimary
+        master_user: replica
+        master_password: "{{ master_password }}"
+        master_host: "{{ hostvars[groups['db_hosts'][0]].private_ip }}" 
+        master_log_file: "{{ hostvars['master']['masterstatus'].File }}"
+        master_log_pos: "{{ hostvars['master']['masterstatus'].Position }}"
+
+    - name: Start replica
+      mysql_replication:
+        mode: startreplica
+        login_unix_socket: /var/run/mysqld/mysqld.sock

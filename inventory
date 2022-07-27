@@ -1,1 +1,5 @@
-web-server ansible_host=18.216.15.48
+web-server  ansible_host=18.224.140.23  private_ip=172.31.16.42
+
+[db_hosts]
+master      ansible_host=18.217.161.243    private_ip=172.31.24.77    server_id=101
+replica     ansible_host=3.16.168.194      private_ip=172.31.30.28    server_id=102
